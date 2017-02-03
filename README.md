@@ -1,7 +1,7 @@
 # Report Portal Powershell Client (*unofficial*)
 Custom PowerShell (v5) client for Report Portal (http://reportportal.io/)
 
-Since version 5 PowerShell supporting classes. This module using them.
+Since version 5 PowerShell support classes. This module use them.
 
 ## Usage
 
