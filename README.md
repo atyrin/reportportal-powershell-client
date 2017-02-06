@@ -12,29 +12,31 @@ $reporter = Get-ReporterInstance "MyLaunchName"
 #optional
 $reporter.endpoint = 127.0.0.1:8080
 $reporter.projectName = "DEMO";
-$reporter.token = "88005553535"; # UUID from portal
+$reporter.token = "7ff757b0-ecb1-459d-8494-ff081804157d"; # UUID from portal
 $reporter.tag= "debian";
 
 $rep.createLaunch()
 
 $item0 = $rep.createRootTestItem("MyTestSuperPack", "Test all product", "SUITE")
-$item1 = $rep.createChildTestItem("First test", "Test first part of product", "TEST")
-$item2 = $rep.createChildTestItem("Second test", "Test second part of product", "TEST")
 
-$rep.addLogs($item1, "error", "Object references an unsaved transient instance")
-$rep.addLogs($item2, "info", "Done!")
+$rep.createChildTestItem("First test", "Test first part of product", "TEST")
+$rep.addLogs("error", "Object references an unsaved transient instance")
+$rep.finishChildTestItem("failed") # remember last child item
 
-$rep.finishTestItem($item1, "failed")
-$rep.finishTestItem($item2, "passed")
+$item = $rep.createChildTestItem("Second test", "Test second part of product", "TEST")
+$rep.addLogs($item, "info", "Done!")
+$rep.finishTestItem($item, "passed")
 
-$rep.finishTestItem($item0, "failed")
+$rep.finishRootTestItem("failed") #remember last root item
 
 $rep.finishLaunch()
+
+#search
+$launchId = $rep.getLaunchByName("MyLaunchName")
+
 ```
 
 **TODO:**
-* enum for statuses
-* overloading functions
 * support files for logger
 * edit items
 * internal container for created items with search by name

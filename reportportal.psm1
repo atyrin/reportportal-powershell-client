@@ -1,12 +1,19 @@
+###################################################
+# Windows Powershell 5.0 (WMF) download link
+# https://msdn.microsoft.com/en-us/powershell/wmf/5.0/requirements
+##################################################
+
+
 class Reporter{
     # from config or global variable
-    [string]$endpoint; #endpoint
-    [string]$projectName; #Current project name
-    [string]$token; # UUID from portal
+    [string]$endpoint = ""; #endpoint
+    [string]$projectName = ""; #Current project name
+    [string]$token = "" # UUID from portal
     [string]$mode = "DEFAULT"; # DEFAULT or DEBUG
-    [string]$tag; # special tags
+    [string]$tag = ""; # special tags
 
     #internal properties
+    hidden [String]$apiVersion = "v1"
     #launch
     hidden [string]$launchName; # launch name (ex. build)
     hidden [string]$launchId; #current launch id
@@ -26,12 +33,12 @@ class Reporter{
     }
 
 
-    [String] createLaunch (){
-        $this.createLaunch($null)
+    [String] createLaunch(){
+        return $this.createLaunch($null)
     }
 
 
-    [String] createLaunch ([String] $description){
+    [String] createLaunch([String] $description){
         <#
         .DESCRIPTION
             Create new test launch in portal. Take some class fields. 
@@ -59,18 +66,37 @@ class Reporter{
     }
 
 
-    [void] finishLaunch(){
+    [void] finishLaunch([String]$launchId){
         <#
         .DESCRIPTION
-            Finish test launch, which was started in this instance.
+            Finish test launch with id from param.
         #>
-        $url = $this.buildURL("$($this.launchSuburl)/$($this.launchId)/finish")
+        $url = $this.buildURL("$($this.launchSuburl)/$($launchId)/finish")
         [String] $json = @"
             {
             "end_time": "$(Get-Date -Format s)"
             }
 "@
             $response = $this.sendRequest("PUT", $url, $json)
+    }
+
+    [void] finishLaunch(){
+        <#
+        .DESCRIPTION
+            Finish test launch, which was started in this instance.
+        #>
+        $this.finishLaunch($this.launchId)
+    }
+
+    [String] getLaunchByName([String]$name){
+        [String] $url = $this.buildURL($this.launchSuburl, "filter.cnt.name=$($name)&")
+        $response = $this.sendRequest("GET", $url)
+
+        if($response.content.Length -ne 1){
+            Write-Warning "There are $($response.content.Length) launches with such name. Take first"
+        }
+        $this.launchId = $response.content[0].id
+        return $response.content[0].id
     }
 
 
@@ -156,7 +182,7 @@ class Reporter{
         #>
         if(!$itemId){
             Write-Warning "[FinishTestItem] Using last created item id"
-            $itemId = $this.lastRootItem;
+            $itemId = $this.lastItem;
         }
         [String] $url = $this.buildURL("$($this.itemSuburl)/$itemId")
 
@@ -167,11 +193,24 @@ class Reporter{
 }
 "@
         $this.sendRequest("PUT", $url, $json)
-        Write-Host ""
+    }
+
+    [void] finishRootTestItem([String]$status){
+        if(!$this.lastRootItem){
+            throw "Last Root Item is empty"
+        }
+        $this.finishTestItem($this.lastRootItem, $status)
+    }
+
+    [void] finishChildTestItem([String]$status){
+        if(!$this.lastItem){
+            throw "Last Item is empty"
+        }
+        $this.finishTestItem($this.lastItem, $status)
     }
 
 
-    [void] addLogs([String]$itemId, [String]$level, [String]$logText){
+    [void] addLogs([String]$itemId, [Level]$level, [String]$logText){
         <#
         .DESCRIPTION
             Uploading logs to item. For one item may be uploaded as much as you want logs.
@@ -200,13 +239,24 @@ class Reporter{
         $this.sendRequest("POST", $url, $json)
     }
 
+    [void] addLogs([Level]$level, [String]$logText){
+        if(!$this.lastItem){
+            throw "Last Item is empty"
+        }
+        $this.addLogs($this.lastItem, $level, $logText)
+    }
+
 
     hidden [String] buildURL([String] $str){
+        return $this.buildURL($str, $null)
+    }
+
+    hidden [String] buildURL([String] $str, [String]$params){
         <#
         .DESCRIPTION
             Creating URL for request.
         #>
-            return "$($this.rphost)/api/v1/$($this.projectname)/$str?access_token=$($this.token)"
+            return "$($this.endpoint)/api/$($this.apiVersion)/$($this.projectname)/$($str)?$($params)access_token=$($this.token)"
     }
 
 
@@ -224,7 +274,7 @@ class Reporter{
     }
 
 
-    [Object] sendRequest([string]$method, [string]$url, [string]$body ){
+    [Object] sendRequest([String]$method, [String]$url, [String]$body ){
         <#
         .DESCRIPTION
             HTTP-requests invoker.
@@ -236,8 +286,17 @@ class Reporter{
             Request body.
         #>
         if (($method -ne "GET") -and ($body)){
+           try{
+            $response = Invoke-RestMethod -Method $method -Uri "$url" -Body $body -ContentType "application/json"
+            return $response
+            }
+            catch [Exception]{
+                throw $this.FailureResponseHandler()
+            }
+        }
+        elseif($method -eq "GET"){
             try{
-                $response = Invoke-RestMethod -Method $method -Uri $url -Body $body -ContentType "application/json"
+                $response = Invoke-RestMethod -Method $method -Uri "$url" -ContentType "application/json"
                 return $response
             }
             catch [Exception]{
@@ -246,7 +305,11 @@ class Reporter{
         }
         else{
             throw "Body is empty"
-        }  
+        }
+    }
+
+    [Object] sendRequest([string]$method, [string]$url){
+        return $this.sendRequest($method, $url, $null) 
     }
 
 
@@ -273,6 +336,23 @@ Enum Types
     AFTER_METHOD
     AFTER_SUITE
     AFTER_TEST
+}
+
+Enum Level
+{
+    TRACE
+    DEBUG
+    INFO
+    WARN 
+    ERROR 
+    ATTACHMENT
+}
+
+Enum Status
+{
+    PASSED
+    FAILED
+    IN_PROGRESS
 }
 
 
