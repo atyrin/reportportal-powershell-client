@@ -34,6 +34,11 @@ $reporter.finishLaunch()
 #search
 $launchId = $reporter.getLaunchByName("MyLaunchName")
 
+#export launch result
+$html = $reporter.exportHTMLReport() 
+#or 
+$reporter.exportHTMLReport($launchId)
+
 ```
 
 **TODO:**

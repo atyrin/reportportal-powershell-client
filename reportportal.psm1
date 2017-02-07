@@ -197,20 +197,20 @@ class Reporter{
 
     [void] finishRootTestItem([String]$status){
         if(!$this.lastRootItem){
-            throw "Last Root Item is empty"
+            throw "Failed to finish child item. Last Root Item is empty."
         }
         $this.finishTestItem($this.lastRootItem, $status)
     }
 
     [void] finishChildTestItem([String]$status){
         if(!$this.lastItem){
-            throw "Last Item is empty"
+            throw "Failed to finish child item. Last Item is empty."
         }
         $this.finishTestItem($this.lastItem, $status)
     }
 
 
-    [void] addLogs([String]$itemId, [Level]$level, [String]$logText){
+    [int] addLogs([String]$itemId, [Level]$level, [String]$logText){
         <#
         .DESCRIPTION
             Uploading logs to item. For one item may be uploaded as much as you want logs.
@@ -227,16 +227,30 @@ class Reporter{
         }
 
         [String] $url = $this.buildURL($this.logSuburl)
-
-        $json=@"
-            {
-            "item_id": "$itemId",
-            "level": "$level",
-            "message": "$logText",
-            "time": "$(Get-Date -Format s)"
-            }
+        $counter = 0
+        do{
+            try{
+                $counter++
+                $json=@"
+                {
+                "item_id": "$itemId",
+                "level": "$level",
+                "message": "$($logText)",
+                "time": "$(Get-Date -Format s)"
+                }
 "@
-        $this.sendRequest("POST", $url, $json)
+        
+                $this.sendRequest("POST", $url, $json)
+                return 0
+            }
+            catch [System.Exception] {
+                Write-Warning "Failed to send logs. Retry #$counter"
+                Start-Sleep -Seconds 5
+            }
+        }
+        while($counter -lt 3)
+        Write-Warning "Failed to send logs. Exit."
+        return 1
     }
 
     [void] addLogs([Level]$level, [String]$logText){
@@ -244,6 +258,18 @@ class Reporter{
             throw "Last Item is empty"
         }
         $this.addLogs($this.lastItem, $level, $logText)
+    }
+
+    [String] exportHTMLReport([String]$launchId){
+        [String]$url = $this.buildURL("$($this.launchSuburl)/$($launchId)/report", "view=html&")
+        return $this.sendRequest("GET", $url)
+    }
+
+    [String] exportHTMLReport(){
+        if(!$this.launchId){
+            throw "Failed to export html report. Launch ID is empty."
+        }
+        return $this.exportHTMLReport($this.launchId)
     }
 
 
@@ -260,7 +286,7 @@ class Reporter{
     }
 
 
-    [String] FailureResponseHandler() {
+    hidden [String] FailureResponseHandler() {
         <#
         .DESCRIPTION
             Request error handler. Get body from error response.
@@ -274,7 +300,7 @@ class Reporter{
     }
 
 
-    [Object] sendRequest([String]$method, [String]$url, [String]$body ){
+    hidden [Object] sendRequest([String]$method, [String]$url, [String]$body ){
         <#
         .DESCRIPTION
             HTTP-requests invoker.
@@ -308,7 +334,7 @@ class Reporter{
         }
     }
 
-    [Object] sendRequest([string]$method, [string]$url){
+    hidden [Object] sendRequest([string]$method, [string]$url){
         return $this.sendRequest($method, $url, $null) 
     }
 
