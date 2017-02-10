@@ -33,6 +33,15 @@ class Reporter{
     }
 
 
+    Reporter(){
+       #constructor without params
+    }
+
+
+    ########################
+    # launch functions
+    ########################
+
     [String] createLaunch(){
         return $this.createLaunch($null)
     }
@@ -79,6 +88,7 @@ class Reporter{
 "@
             $response = $this.sendRequest("PUT", $url, $json)
     }
+    
 
     [void] finishLaunch(){
         <#
@@ -88,17 +98,81 @@ class Reporter{
         $this.finishLaunch($this.launchId)
     }
 
-    [String] getLaunchByName([String]$name){
-        [String] $url = $this.buildURL($this.launchSuburl, "filter.cnt.name=$($name)&")
-        $response = $this.sendRequest("GET", $url)
 
-        if($response.content.Length -ne 1){
-            Write-Warning "There are $($response.content.Length) launches with such name. Take first"
+    [void] forceFinishLaunch([String]$launchId){
+        <#
+        .DESCRIPTION
+            Force finish test launch with id from param. 
+            Will finish launch even if some test in running state.
+        #>
+        $url = $this.buildURL("$($this.launchSuburl)/$($launchId)/stop")
+        [String] $json = @"
+            {
+            "end_time": "$(Get-Date -Format s)"
+            }
+"@
+            $response = $this.sendRequest("PUT", $url, $json)
+    }
+
+
+    [void] forceFinishLaunch(){
+        $this.forceFinishLaunch($this.launchId)
+    }
+
+
+    hidden [String] getLaunchByParam([hashtable]$params){
+        <#
+        .DESCRIPTION
+            Get specific launch by params
+        .PARAMETER params
+            HashTable with filters
+        #>
+        [System.Text.StringBuilder]$paramsString = "page.sort=start_time,DESC&" #sort for taking last
+        foreach($item in $params.GetEnumerator()){
+            $paramsString.Append("$($item.Key)=$($item.Value)&")
+        }
+        [String] $url = $this.buildURL($this.launchSuburl, "$($paramsString.ToString())")
+        $response = $this.sendRequest("GET", $url)
+        if($response.content.Length -gt 1){
+            Write-Warning "There are $($response.content.Length) launches with such name. Take latest"
         }
         $this.launchId = $response.content[0].id
         return $response.content[0].id
     }
 
+
+    [String] getLaunchByName([String]$name){
+        $filter =@{
+            "filter.cnt.name" = $name
+        }
+        return $this.getLaunchByParam($filter)
+    }
+
+
+    [String] getLaunchByNameAndTag([String]$name, [String]$tag){
+        $filter =@{
+            "filter.cnt.name" = $name
+            "filter.has.tags" = $tag
+        }
+        return $this.getLaunchByParam($filter)
+    }
+
+
+    [bool] isLaunchRunning([String]$launchId){
+        [String] $url = $this.buildURL("$($this.launchSuburl)/$launchId")
+        $response = $this.sendRequest("GET", $url)
+        if($response.status -eq "IN_PROGRESS"){
+            return $true
+        }
+        else{
+            return $false
+        }
+    }
+
+
+    ########################
+    # items functions
+    ########################
 
     [String] createRootTestItem([String]$name, [String]$description, [Types]$type){
         <#
@@ -171,6 +245,7 @@ class Reporter{
         return $this.createChildTestItem([String]$name, [String]$description, [Types]$type, $null)
     }
 
+
     [void] finishTestItem([String]$itemId, [String]$status){
         <#
         .DESCRIPTION
@@ -195,6 +270,7 @@ class Reporter{
         $this.sendRequest("PUT", $url, $json)
     }
 
+
     [void] finishRootTestItem([String]$status){
         if(!$this.lastRootItem){
             throw "Failed to finish child item. Last Root Item is empty."
@@ -209,6 +285,10 @@ class Reporter{
         $this.finishTestItem($this.lastItem, $status)
     }
 
+
+    ########################
+    # logs functions
+    ########################
 
     [int] addLogs([String]$itemId, [Level]$level, [String]$logText){
         <#
@@ -235,7 +315,7 @@ class Reporter{
                 {
                 "item_id": "$itemId",
                 "level": "$level",
-                "message": "$($logText)",
+                "message": "$($logText.Replace("`n", "\n").Replace("`r"," "))",
                 "time": "$(Get-Date -Format s)"
                 }
 "@
@@ -253,12 +333,18 @@ class Reporter{
         return 1
     }
 
+
     [void] addLogs([Level]$level, [String]$logText){
         if(!$this.lastItem){
             throw "Last Item is empty"
         }
         $this.addLogs($this.lastItem, $level, $logText)
     }
+
+
+    ########################
+    # export report functions
+    ########################
 
     [String] exportHTMLReport([String]$launchId){
         [String]$url = $this.buildURL("$($this.launchSuburl)/$($launchId)/report", "view=html&")
@@ -272,6 +358,10 @@ class Reporter{
         return $this.exportHTMLReport($this.launchId)
     }
 
+
+    ########################
+    # common functions
+    ########################
 
     hidden [String] buildURL([String] $str){
         return $this.buildURL($str, $null)
@@ -333,6 +423,7 @@ class Reporter{
             throw "Body is empty"
         }
     }
+
 
     hidden [Object] sendRequest([string]$method, [string]$url){
         return $this.sendRequest($method, $url, $null) 

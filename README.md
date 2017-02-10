@@ -10,10 +10,10 @@ Since version 5 PowerShell support classes. This module use them.
 $reporter = Get-ReporterInstance "MyLaunchName"
 
 #optional
-$reporter.endpoint = 127.0.0.1:8080
+$reporter.endpoint = "127.0.0.1:8080"
 $reporter.projectName = "DEMO";
 $reporter.token = "7ff757b0-ecb1-0000-0000-00081804157d"; # UUID from portal
-$reporter.tag= "debian";
+$reporter.tag= "mytag";
 
 $reporter.createLaunch()
 
@@ -30,9 +30,13 @@ $reporter.finishTestItem($item, "passed")
 $reporter.finishRootTestItem("failed") #remember last root item
 
 $reporter.finishLaunch()
+if($reporter.isLaunchRunning($reporter.launchId)){
+    $reporter.forceFinishLaunch($launchId) #hard stop of launch
+}
 
-#search
+#search latest (by creation time) launch
 $launchId = $reporter.getLaunchByName("MyLaunchName")
+$launchId = $reporter.getLaunchByNameAndTag("MyLaunchName", "mytag")
 
 #export launch result
 $html = $reporter.exportHTMLReport() 
@@ -41,7 +45,3 @@ $reporter.exportHTMLReport($launchId)
 
 ```
 
-**TODO:**
-* support files for logger
-* edit items
-* internal container for created items with search by name
