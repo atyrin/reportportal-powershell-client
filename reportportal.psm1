@@ -315,7 +315,7 @@ class Reporter{
                 {
                 "item_id": "$itemId",
                 "level": "$level",
-                "message": "$($logText.Replace("`n", "\n").Replace("`r"," "))",
+                "message": "$($logText.Replace("`n", "\n").Replace("`r"," ").Replace("\","\\"))",
                 "time": "$(Get-Date -Format s)"
                 }
 "@
