@@ -10,7 +10,7 @@ class Reporter{
     [string]$projectName = ""; #Current project name
     [string]$token = "" # UUID from portal
     [string]$mode = "DEFAULT"; # DEFAULT or DEBUG
-    [string]$tag = ""; # special tags
+    $tag = ""; # special tags
 
     #internal properties
     hidden [String]$apiVersion = "v1"
@@ -30,11 +30,6 @@ class Reporter{
 
     Reporter([String] $build){
         $this.launchName = $build;
-    }
-
-
-    Reporter(){
-       #constructor without params
     }
 
 
@@ -58,17 +53,16 @@ class Reporter{
             $description = "Launch from powershell"
         }
         [String] $url = $this.buildURL($this.launchSuburl)
-        [String] $json = @"
-    {
-    "description": "$description",
-    "mode": "$($this.mode)",
-    "name": "$($this.launchName)",
-    "start_time": "$(Get-Date -Format s)",
-    "tags": [
-        "$($this.tag)"
-    ]
-    }
-"@
+        $json = @{
+            "description" = "$description"
+            "mode" = "$($this.mode)"
+            "name" = "$($this.launchName)"
+            "start_time" = "$(Get-Date -Format s)"
+            "tags" = @(
+                $($this.tag)
+            )
+        }
+        $json = $json | ConvertTo-Json
         $response = $this.sendRequest("POST", $url, $json)
         $this.launchId = $response.id
         return $response.id
@@ -81,12 +75,11 @@ class Reporter{
             Finish test launch with id from param.
         #>
         $url = $this.buildURL("$($this.launchSuburl)/$($launchId)/finish")
-        [String] $json = @"
-            {
-            "end_time": "$(Get-Date -Format s)"
+        $json = @{
+            "end_time" =  $(Get-Date -Format s)
             }
-"@
-            $response = $this.sendRequest("PUT", $url, $json)
+        $json = $json | ConvertTo-Json
+        $response = $this.sendRequest("PUT", $url, $json)
     }
     
 
@@ -106,12 +99,11 @@ class Reporter{
             Will finish launch even if some test in running state.
         #>
         $url = $this.buildURL("$($this.launchSuburl)/$($launchId)/stop")
-        [String] $json = @"
-            {
-            "end_time": "$(Get-Date -Format s)"
-            }
-"@
-            $response = $this.sendRequest("PUT", $url, $json)
+        $json = @{
+            "end_time" = $(Get-Date -Format s)
+        }
+        $json = $json | ConvertTo-Json
+        $response = $this.sendRequest("PUT", $url, $json)
     }
 
 
@@ -123,7 +115,7 @@ class Reporter{
     hidden [String] getLaunchByParam([hashtable]$params){
         <#
         .DESCRIPTION
-            Get specific launch by params
+            Get specific launch by params. Service method.
         .PARAMETER params
             HashTable with filters
         #>
@@ -142,7 +134,7 @@ class Reporter{
 
 
     [String] getLaunchByName([String]$name){
-        $filter =@{
+        $filter = @{
             "filter.cnt.name" = $name
         }
         return $this.getLaunchByParam($filter)
@@ -150,7 +142,7 @@ class Reporter{
 
 
     [String] getLaunchByNameAndTag([String]$name, [String]$tag){
-        $filter =@{
+        $filter = @{
             "filter.cnt.name" = $name
             "filter.has.tags" = $tag
         }
@@ -158,9 +150,22 @@ class Reporter{
     }
 
 
-    [bool] isLaunchRunning([String]$launchId){
+    hidden [Object] getLaunchInfo([String]$launchId){
+        <#
+        .DESCRIPTION
+            Get full information about existing launch. Service method.
+        #>
         [String] $url = $this.buildURL("$($this.launchSuburl)/$launchId")
-        $response = $this.sendRequest("GET", $url)
+        return $this.sendRequest("GET", $url)
+    }
+
+
+    [bool] isLaunchRunning([String]$launchId){
+        <#
+        .DESCRIPTION
+            Check is launch in running state.
+        #>
+        $response = $this.getLaunchInfo($launchId)
         if($response.status -eq "IN_PROGRESS"){
             return $true
         }
@@ -168,6 +173,50 @@ class Reporter{
             return $false
         }
     }
+
+
+    hidden [void] updateLaunch([String]$launchID, $tag){
+        <#
+        .DESCRIPTION
+            Set tag to existing launch. Remove current tags. Service method.
+        .PARAMETER launchid
+            Launch ID for new tag.
+        .PARAMETER tag
+            Tag for set.
+        #>
+        [String]$url = $this.buildURL("$($this.launchSuburl)/$launchId/update")
+        $json = @{
+            "tags" = @($tag)
+        }
+        $json = $json | ConvertTo-Json
+        $response = $this.sendRequest("PUT", $url, $json)
+        Write-Host $response.msg
+    }
+
+
+    [void] addLaunchTag([String]$launchId, [String]$tag){
+        <#
+        .DESCRIPTION
+            Add tag for existing launch. With saving current tags.
+        .PARAMETER launchid
+            Launch ID for new tag.
+        .PARAMETER tag
+            Tag for addition.
+        #>
+        if(!$this.isLaunchRunning($launchID)){
+            throw "This launch was already finished"
+        }
+        $response = $this.getLaunchInfo($launchId)
+        [System.Collections.ArrayList]$tags = $response.tags
+        $tags.add($tag)
+        $this.updateLaunch($launchID, $tags)
+    }
+
+
+    [void] addLaunchTag([String]$tag){
+        $this.addLaunchTag($this.launchId, $tag)
+    }
+
 
 
     ########################
@@ -187,15 +236,14 @@ class Reporter{
         #>
 
         [String] $url = $this.buildURL($this.itemSuburl)
-        $json=@"
-            {
-            "description": "$description",
-            "launch_id": "$($this.launchId)",
-            "name": "$name",
-            "start_time": "$(Get-Date -Format s)",
-            "type": "$type"
+        $json = @{
+            "description" = $description
+            "launch_id" = $($this.launchId)
+            "name" = $name
+            "start_time" = $(Get-Date -Format s)
+            "type" = "$type"
             }
-"@
+        $json = $json | ConvertTo-Json
         $response = $this.sendRequest("POST", $url, $json)
         if($this.lastRootItem){
             Write-Warning "Re-write last root item id."
@@ -226,15 +274,14 @@ class Reporter{
 
         [String] $url = $this.buildURL("$($this.itemSuburl)/$root")
 
-        $json=@"
-            {
-            "description": "$description",
-            "launch_id": "$($this.launchId)",
-            "name": "$name",
-            "start_time": "$(Get-Date -Format s)",
-            "type": "$type"
+        $json = @{
+            "description" = $description
+            "launch_id" = $($this.launchId)
+            "name" = $name
+            "start_time" = $(Get-Date -Format s)
+            "type" = "$type"
             }
-"@
+        $json = $json | ConvertTo-Json
         $response = $this.sendRequest("POST", $url, $json)
         $this.lastItem = $response.id
         return $response.id
@@ -261,12 +308,12 @@ class Reporter{
         }
         [String] $url = $this.buildURL("$($this.itemSuburl)/$itemId")
 
-        $json=@"
-           {
-  "end_time": "$(Get-Date -Format s)",
-  "status": "$status"
-}
-"@
+        $json = @{
+            "end_time" = $(Get-Date -Format s)
+            "status" = $status
+        }
+
+        $json = $json | ConvertTo-Json
         $this.sendRequest("PUT", $url, $json)
     }
 
@@ -311,15 +358,13 @@ class Reporter{
         do{
             try{
                 $counter++
-                $json=@"
-                {
-                "item_id": "$itemId",
-                "level": "$level",
-                "message": "$($logText.Replace("`n", "\n").Replace("`r"," ").Replace("\","\\"))",
-                "time": "$(Get-Date -Format s)"
+                $json = @{
+                    "item_id" = $itemId
+                    "level" = $level
+                    "message" = $($logText.Replace("`n", "\n").Replace("`r"," ").Replace("\","\\"))
+                    "time" = $(Get-Date -Format s)
                 }
-"@
-        
+                $json = $json | ConvertTo-Json
                 $this.sendRequest("POST", $url, $json)
                 return 0
             }
@@ -390,7 +435,7 @@ class Reporter{
     }
 
 
-    hidden [Object] sendRequest([String]$method, [String]$url, [String]$body ){
+    hidden [Object] sendRequest([String]$method, [String]$url, $body ){
         <#
         .DESCRIPTION
             HTTP-requests invoker.
