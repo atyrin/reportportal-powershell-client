@@ -5,6 +5,7 @@ Since version 5 PowerShell support classes. This module use them.
 
 ## Usage
 
+#### Workflow
 ```powershell
 
 $reporter = Get-ReporterInstance "MyLaunchName"
@@ -30,6 +31,9 @@ $reporter.finishTestItem($item, "passed")
 $reporter.finishRootTestItem("failed") #remember last root item
 
 $reporter.finishLaunch()
+```
+#### Additional features
+```powershell
 if($reporter.isLaunchRunning($reporter.launchId)){
     $reporter.forceFinishLaunch($launchId) #hard stop of launch
 }
@@ -42,6 +46,14 @@ $launchId = $reporter.getLaunchByNameAndTag("MyLaunchName", "mytag")
 $html = $reporter.exportHTMLReport() 
 #or 
 $reporter.exportHTMLReport($launchId)
+
+#add tag to launch. save previous tags.
+$reporter.addLaunchTag($launchId, "newtag")
+ 
+#add tag to launch. re-write previous tags.
+$reporter.updateLaunch($launchId, "newtag")
+#or
+$reporter.updateLaunch($launchId, @("newtag1","newtag2"))
 
 ```
 
