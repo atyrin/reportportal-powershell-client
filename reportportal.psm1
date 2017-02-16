@@ -127,7 +127,7 @@ class Reporter{
         .PARAMETER params
             HashTable with filters
         #>
-        [System.Text.StringBuilder]$paramsString = "page.sort=start_time,DESC&" #sort for taking last
+        [System.Text.StringBuilder]$paramsString = "tab.id=allCases&page.sort=start_time,DESC&" #sort for taking last
         foreach($item in $params.GetEnumerator()){
             $paramsString.Append("$($item.Key)=$($item.Value)&")
         }
