@@ -360,7 +360,7 @@ class Reporter{
                 $counter++
                 $json = @{
                     "item_id" = $itemId
-                    "level" = $level
+                    "level" = "$level"
                     "message" = $($logText.Replace("\","\\").Replace("`n", "\n").Replace("`r"," "))
                     "time" = $(Get-Date -Format s)
                 }
