@@ -361,7 +361,7 @@ class Reporter{
                 $json = @{
                     "item_id" = $itemId
                     "level" = $level
-                    "message" = $($logText.Replace("`n", "\n").Replace("`r"," ").Replace("\","\\"))
+                    "message" = $($logText.Replace("\","\\").Replace("`n", "\n").Replace("`r"," "))
                     "time" = $(Get-Date -Format s)
                 }
                 $json = $json | ConvertTo-Json
