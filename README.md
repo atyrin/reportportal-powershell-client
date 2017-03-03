@@ -17,6 +17,7 @@ $reporter.token = "7ff757b0-ecb1-0000-0000-00081804157d"; # UUID from portal
 $reporter.tag= "mytag";
 
 $reporter.createLaunch()
+#or $reporter.createLaunch("launch description")
 
 $rootItemId = $rep.createRootTestItem("MyTestSuperPack", "Test all product", "SUITE")
 
@@ -56,4 +57,23 @@ $reporter.updateLaunch($launchId, "newtag")
 $reporter.updateLaunch($launchId, @("newtag1","newtag2"))
 
 ```
+#### Customize logging
+In function LogThis replace Write-Host(-Warning and -Error) to your own logger
+```powershell
+function LogThis{
+    Param(
+        [String]$message,
+        [string]$loglevel = "info"
+    )
 
+    if($loglevel.ToLower() -eq "error"){
+        Write-MyLogger $message -level error
+    }
+    elseif ($loglevel.ToLower() -eq "warn") {
+        Write-MyLogger $message -level warning
+    }
+    else{
+        Write-MyLogger $message -level info
+    }
+}
+```

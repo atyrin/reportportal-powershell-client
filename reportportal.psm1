@@ -38,7 +38,7 @@ class Reporter{
     ########################
 
     [String] createLaunch(){
-        return $this.createLaunch($null)
+        return $this.createLaunch("Launch from powershell")
     }
 
 
@@ -49,9 +49,7 @@ class Reporter{
         .PARAMETER description
             Launch description.
         #>
-        if(!$description){
-            $description = "Launch from powershell"
-        }
+
         [String] $url = $this.buildURL($this.launchSuburl)
         $json = @{
             "description" = "$description"
@@ -126,7 +124,7 @@ class Reporter{
         [String] $url = $this.buildURL($this.launchSuburl, "$($paramsString.ToString())")
         $response = $this.sendRequest("GET", $url)
         if($response.content.Length -gt 1){
-            Write-Warning "There are $($response.content.Length) launches with such name. Take latest"
+            LogThis -message "There are $($response.content.Length) launches with such name. Take latest" -loglevel "warn"
         }
         $this.launchId = $response.content[0].id
         return $response.content[0].id
@@ -190,7 +188,7 @@ class Reporter{
         }
         $json = $json | ConvertTo-Json
         $response = $this.sendRequest("PUT", $url, $json)
-        Write-Host $response.msg
+        LogThis -message "$($response.msg)"
     }
 
 
@@ -246,7 +244,7 @@ class Reporter{
         $json = $json | ConvertTo-Json
         $response = $this.sendRequest("POST", $url, $json)
         if($this.lastRootItem){
-            Write-Warning "Re-write last root item id."
+            LogThis -message "Re-write last root item id." -loglevel "warn"
         }
         $this.lastRootItem = $response.id;
         return $response.id
@@ -268,7 +266,7 @@ class Reporter{
         #>
 
         if(!$root){
-            Write-Warning "Using last created root item id"
+            LogThis -message "Using last created root item id" -loglevel "warn"
             $root = $this.lastRootItem;
         }
 
@@ -303,7 +301,7 @@ class Reporter{
             Item status which will be set after finishing. Ex. PASSED.
         #>
         if(!$itemId){
-            Write-Warning "[FinishTestItem] Using last created item id"
+            LogThis -message "[FinishTestItem] Using last created item id" -loglevel "warn"
             $itemId = $this.lastItem;
         }
         [String] $url = $this.buildURL("$($this.itemSuburl)/$itemId")
@@ -349,32 +347,29 @@ class Reporter{
             Log content.
         #>
         if(!$itemId){
-            Write-Warning "[addLogs] Using last created item id"
+            LogThis -message "[addLogs] Using last created item id" -loglevel "warn"
             $itemId = $this.lastItem;
         }
 
         [String] $url = $this.buildURL($this.logSuburl)
         $counter = 0
-        do{
-            try{
-                $counter++
-                $json = @{
-                    "item_id" = $itemId
-                    "level" = "$level"
-                    "message" = $($logText.Replace("\","\\").Replace("`n", "\n").Replace("`r"," "))
-                    "time" = $(Get-Date -Format s)
-                }
-                $json = $json | ConvertTo-Json
-                $this.sendRequest("POST", $url, $json)
-                return 0
+        try{
+            $counter++
+            $json = @{
+                "item_id" = $itemId
+                "level" = "$level"
+                "message" = $($logText.Replace("\","\\").Replace("`n", "\n").Replace("`r"," "))
+                "time" = $(Get-Date -Format s)
             }
-            catch [System.Exception] {
-                Write-Warning "Failed to send logs. Retry #$counter"
-                Start-Sleep -Seconds 5
-            }
+            $json = $json | ConvertTo-Json
+            $this.sendRequest("POST", $url, $json)
+            return 0
+            LogThis -message "Logs was sent"
         }
-        while($counter -lt 3)
-        Write-Warning "Failed to send logs. Exit."
+        catch [System.Exception] {
+            LogThis -message "Failed to send logs. Retry #$counter" -loglevel "error"
+            LogThis -message "Message: $logText"
+        }
         return 1
     }
 
@@ -430,7 +425,6 @@ class Reporter{
         $result = $_.Exception.Response.GetResponseStream();
         [System.IO.StreamReader]$reader = New-Object System.IO.StreamReader($result);
         [String] $responseBody = $reader.ReadToEnd();
-        Write-Host "Response from failure handler $responseBody"
         return $responseBody;
     }
 
@@ -447,13 +441,24 @@ class Reporter{
             Request body.
         #>
         if (($method -ne "GET") -and ($body)){
-           try{
-            $response = Invoke-RestMethod -Method $method -Uri "$url" -Body $body -ContentType "application/json"
-            return $response
+            $counter = 0
+            do{
+                $counter++
+                try{
+                    LogThis "Try to send request # $counter"
+                    $response = Invoke-RestMethod -Method $method -Uri "$url" -Body $body -ContentType "application/json"
+                    return $response
+                }
+                catch [Exception]{
+                    if($counter -ge 4){
+                        throw $this.FailureResponseHandler()
+                    }
+                    LogThis -message "Failed to send request: $($this.FailureResponseHandler())" -loglevel "error"
+                    Start-Sleep -Seconds 5
+                }
             }
-            catch [Exception]{
-                throw $this.FailureResponseHandler()
-            }
+            while($counter -lt 5)
+            return "Unaccessible code, but VS code show, that there is error. Tell Andrey Tyrin if you have caught it."
         }
         elseif($method -eq "GET"){
             try{
@@ -517,7 +522,32 @@ Enum Status
     IN_PROGRESS
 }
 
+function LogThis{
+    <#
+    .DESCRIPTION
+        Function for using custom loggers in your enviroment 
+    .PARAMETER message
+        Message for logging.
+    .PARAMETER loglevel
+        Message level.
+    #>
 
+    Param(
+        [String]$message,
+        [string]$loglevel = "info"
+    )
+
+    if($loglevel.ToLower() -eq "error"){
+        Write-Error $message
+    }
+    elseif ($loglevel.ToLower() -eq "warn") {
+        Write-Warning $message
+    }
+    else{
+        Write-Host $message
+    }
+
+}
 
 function Get-ReporterInstance($launchName){
     <#
@@ -525,6 +555,6 @@ function Get-ReporterInstance($launchName){
         Return instance of Reporter.
     .PARAMETER launchName
         Parameter for constructor.
-        #>
+    #>
     return [Reporter]::new($launchName)
 }
