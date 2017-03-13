@@ -121,7 +121,7 @@ class Reporter{
         foreach($item in $params.GetEnumerator()){
             $paramsString.Append("$($item.Key)=$($item.Value)&")
         }
-        [String] $url = $this.buildURL($this.launchSuburl, "$($paramsString.ToString())")
+        [String] $url = $this.buildURL($this.launchSuburl, $($paramsString.ToString()))
         $response = $this.sendRequest("GET", $url)
         if($response.content.Length -gt 1){
             LogThis -message "There are $($response.content.Length) launches with such name. Take latest" -loglevel "warn"
@@ -353,23 +353,25 @@ class Reporter{
 
         [String] $url = $this.buildURL($this.logSuburl)
         $counter = 0
-        try{
-            $counter++
-            $json = @{
-                "item_id" = $itemId
-                "level" = "$level"
-                "message" = $($logText.Replace("\","\\").Replace("`n", "\n").Replace("`r"," "))
-                "time" = $(Get-Date -Format s)
+        do{
+            try{
+                $counter++
+                $json = @{
+                    "item_id" = $itemId
+                    "level" = "$level"
+                    "message" = $($logText.Replace("\","\\").Replace("`n", "\n").Replace("`r"," "))
+                    "time" = $(Get-Date -Format s)
+                }
+                $json = $json | ConvertTo-Json
+                $this.sendRequest("POST", $url, $json)
+                return 0
+                LogThis -message "Logs was sent"
             }
-            $json = $json | ConvertTo-Json
-            $this.sendRequest("POST", $url, $json)
-            return 0
-            LogThis -message "Logs was sent"
-        }
-        catch [System.Exception] {
-            LogThis -message "Failed to send logs. Retry #$counter" -loglevel "error"
-            LogThis -message "Message: $logText"
-        }
+            catch [System.Exception] {
+                LogThis -message "Failed to send logs. Retry #$counter" -loglevel "error"
+                LogThis -message "Message: $logText"
+            }
+        }while($counter -lt 2)
         return 1
     }
 
@@ -422,14 +424,22 @@ class Reporter{
             Request error handler. Get body from error response.
         #>
         
-        $result = $_.Exception.Response.GetResponseStream();
-        [System.IO.StreamReader]$reader = New-Object System.IO.StreamReader($result);
-        [String] $responseBody = $reader.ReadToEnd();
-        return $responseBody;
+        LogThis -message ("Create filter for launch search " + $_.Exception.message) -loglevel "error"
+        if($_.Exception.Response)
+		{
+			$result = $_.Exception.Response.GetResponseStream();
+			[System.IO.StreamReader]$reader = New-Object System.IO.StreamReader($result);
+			[String] $responseBody = $reader.ReadToEnd();
+			return $responseBody;
+		}
+		else
+		{
+			return $null
+		}
     }
 
 
-    hidden [Object] sendRequest([String]$method, [String]$url, $body ){
+    hidden [Object] sendRequest([String]$method, $url, $body ){
         <#
         .DESCRIPTION
             HTTP-requests invoker.
@@ -446,7 +456,7 @@ class Reporter{
                 $counter++
                 try{
                     LogThis "Try to send request # $counter"
-                    $response = Invoke-RestMethod -Method $method -Uri "$url" -Body $body -ContentType "application/json"
+                    $response = Invoke-RestMethod -Method $method -Uri $url -Body $body -ContentType "application/json"
                     return $response
                 }
                 catch [Exception]{
@@ -462,7 +472,7 @@ class Reporter{
         }
         elseif($method -eq "GET"){
             try{
-                $response = Invoke-RestMethod -Method $method -Uri "$url" -ContentType "application/json"
+                $response = Invoke-RestMethod -Method $method -Uri $url -ContentType "application/json"
                 return $response
             }
             catch [Exception]{
