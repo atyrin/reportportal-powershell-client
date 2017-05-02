@@ -247,6 +247,7 @@ class Reporter{
             LogThis -message "Re-write last root item id." -loglevel "warn"
         }
         $this.lastRootItem = $response.id;
+        Start-Sleep -Seconds 1 #hack for workaround "Log item still should be after (OR equal) parent's start time and before (OR equal) parent's finish time."
         return $response.id
     }
 
@@ -282,6 +283,7 @@ class Reporter{
         $json = $json | ConvertTo-Json
         $response = $this.sendRequest("POST", $url, $json)
         $this.lastItem = $response.id
+        Start-Sleep -Seconds 1 #hack for workaround "Log item still should be after (OR equal) parent's start time and before (OR equal) parent's finish time."
         return $response.id
     }
 
@@ -313,6 +315,7 @@ class Reporter{
 
         $json = $json | ConvertTo-Json
         $this.sendRequest("PUT", $url, $json)
+        Start-Sleep -Seconds 1 #hack for workaround "Log item still should be after (OR equal) parent's start time and before (OR equal) parent's finish time."
     }
 
 
@@ -323,11 +326,103 @@ class Reporter{
         $this.finishTestItem($this.lastRootItem, $status)
     }
 
+
     [void] finishChildTestItem([String]$status){
         if(!$this.lastItem){
             throw "Failed to finish child item. Last Item is empty."
         }
         $this.finishTestItem($this.lastItem, $status)
+    }
+
+
+    hidden [String] getTestItemByParam([hashtable]$params){
+        <#
+        .DESCRIPTION
+            Get specific test item by params. Service method.
+        .PARAMETER params
+            HashTable with filters
+        #>
+        [System.Text.StringBuilder]$paramsString = "page.sort=start_time,DESC&" #sort for taking last
+        foreach($item in $params.GetEnumerator()){
+            $paramsString.Append("$($item.Key)=$($item.Value)&")
+        }
+        [String] $url = $this.buildURL($this.itemSuburl, "$($paramsString.ToString())")
+        $response = $this.sendRequest("GET", $url)
+        if($response.content.Length -gt 1){
+            LogThis -message "There are $($response.content.Length) test items with such name. Take latest" -loglevel "warn"
+        }
+        $this.launchId = $response.content[0].id
+        return $response.content[0].id
+    }
+
+
+    [String] getRootTestItemByName([String]$name, [String]$launch){
+        <#
+        .DESCRIPTION
+            Get specific root test item (under launch) by name 
+        .PARAMETER name
+            Item name
+        .PARAMETER launch
+            Launch ID
+        #>
+        $filter = @{
+            "filter.cnt.name" = $name
+            "filter.eq.launch" = $launch
+        }
+        return $this.getTestItemByParam($filter)
+    }
+
+
+    [String] getRootTestItemByName([String]$name){
+        <#
+        .DESCRIPTION
+            Get specific root test item (under launch) by name. Using current launch ID. 
+        .PARAMETER name
+            Item name
+        #>
+        $filter = @{
+            "filter.cnt.name" = $name
+            "filter.eq.launch" = $this.launchId
+        }
+        return $this.getTestItemByParam($filter)
+    }
+
+
+    [String] getChildTestItemByName([String]$name, [String]$parent){
+        <#
+        .DESCRIPTION
+            Get specific child test item (under another test item) by name. Using current launch ID. 
+        .PARAMETER name
+            Item name
+        .PARAMETER parent
+            Parent test item ID
+        #>
+        $filter = @{
+            "filter.cnt.name" = $name
+            "filter.eq.launch" = $this.launchId
+            "filter.eq.parent" = $parent
+        }
+        return $this.getTestItemByParam($filter)
+    }
+
+
+    [String] getChildTestItemByName([String]$name, [String]$launch, [String]$parent){
+        <#
+        .DESCRIPTION
+            Get specific child test item (under another test item) by name 
+        .PARAMETER name
+            Item name
+        .PARAMETER launch
+            Launch ID
+        .PARAMETER parent
+            Parent test item ID
+        #>
+        $filter = @{
+            "filter.cnt.name" = $name
+            "filter.eq.launch" = $launch
+            "filter.eq.parent" = $parent
+        }
+        return $this.getTestItemByParam($filter)
     }
 
 
@@ -350,6 +445,10 @@ class Reporter{
             LogThis -message "[addLogs] Using last created item id" -loglevel "warn"
             $itemId = $this.lastItem;
         }
+        if(!$logText){
+            LogThis -message "[addLogs] Empty log string. Skip sending." -loglevel "warn"
+            return 1
+        }
 
         [String] $url = $this.buildURL($this.logSuburl)
         $counter = 0
@@ -363,7 +462,7 @@ class Reporter{
                     "time" = $(Get-Date -Format s)
                 }
                 $json = $json | ConvertTo-Json
-                $this.sendRequest("POST", $url, $json)
+                $this.sendRequestLogs($url, $json)
                 return 0
                 LogThis -message "Logs was sent"
             }
@@ -468,7 +567,7 @@ class Reporter{
                 }
             }
             while($counter -lt 5)
-            return "Unaccessible code, but VS code show, that there is error. Tell Andrey Tyrin if you have caught it."
+            return "Unaccessible code, but VS Code show, that there is error. Tell @atyrin if you have caught it."
         }
         elseif($method -eq "GET"){
             try{
@@ -481,6 +580,26 @@ class Reporter{
         }
         else{
             throw "Body is empty"
+        }
+    }
+
+
+    hidden [Object] sendRequestLogs([String]$url, $body){
+        <#
+        .DESCRIPTION
+            Extra method for send requests without retries. Special for logging.
+        .PARAMETER url
+            Request target.
+        .PARAMETER body
+            Request body.
+        #>
+        try{
+            $response = Invoke-RestMethod -Method "POST" -Uri $url -Body $body -ContentType "application/json"
+            return $response
+        }
+        catch [Exception]{
+            LogThis -message "Failed to send request: $($this.FailureResponseHandler())" -loglevel "error"
+            throw $this.FailureResponseHandler()
         }
     }
 

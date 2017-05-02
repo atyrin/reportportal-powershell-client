@@ -35,6 +35,7 @@ $reporter.finishLaunch()
 ```
 #### Additional features
 ```powershell
+#force finish
 if($reporter.isLaunchRunning($reporter.launchId)){
     $reporter.forceFinishLaunch($launchId) #hard stop of launch
 }
@@ -42,6 +43,12 @@ if($reporter.isLaunchRunning($reporter.launchId)){
 #search latest (by creation time) launch
 $launchId = $reporter.getLaunchByName("MyLaunchName")
 $launchId = $reporter.getLaunchByNameAndTag("MyLaunchName", "mytag")
+
+#search latest (by creation time) test item
+#for root (under launch) test items
+$testItemId = $reporter.getRootTestItemByName("testItemName", $launchID)
+#for child (under another test item) test items
+$testItemId = $reporter.getChildTestItemByName("testItemName", $launchID, $parentID)
 
 #export launch result
 $html = $reporter.exportHTMLReport() 
