@@ -351,7 +351,6 @@ class Reporter{
         if($response.content.Length -gt 1){
             LogThis -message "There are $($response.content.Length) test items with such name. Take latest" -loglevel "warn"
         }
-        $this.launchId = $response.content[0].id
         return $response.content[0].id
     }
 
@@ -368,6 +367,7 @@ class Reporter{
         $filter = @{
             "filter.cnt.name" = $name
             "filter.eq.launch" = $launch
+            "filter.size.path" = 0
         }
         return $this.getTestItemByParam($filter)
     }
